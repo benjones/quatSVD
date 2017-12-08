@@ -25,6 +25,9 @@ inline float rsqrt(float x)
   return xrsqrt_est*(1.5f - x*0.5f*xrsqrt_est*xrsqrt_est); // NR iteration
 }
 
+inline double fast_sqrt(double x){
+  return x* rsqrt(x);
+}
 
 
 //internal details
@@ -385,6 +388,12 @@ namespace{
 	std::cout << "quat: " << q[0] << ' ' << q[1] << ' '<< q[2] << ' ' << q[3] << std::endl;
   }
 
+  inline void matDump(double* m){
+	std::cout << m[0] << ' ' << m[1] << ' ' << m[2] << '\n'
+			  << m[3] << ' ' << m[4] << ' ' << m[5] << '\n'
+			  << m[6] << ' ' << m[7] << ' ' << m[8] << std::endl;
+  }
+  
 
   inline std::array<double, 4> jacobiDiagonalize(double* matrix){
 	Symm3x3 ATA(matrix);
@@ -586,44 +595,248 @@ namespace{
 	
   }
 
+  //returns the 2 components of the quaternion
+  //such that Q^T * B has a 0 in element p, q
+  template<int r, int c>
+	std::pair<double,double> computeGivensQR(double* B, double eps){
+
+	auto app = B[4*c];
+	auto apq = B[3*r + c];
+
+	auto rho = std::sqrt(app*app + apq*apq);
+	double sh = rho > eps ? apq : 0;
+	double ch = std::abs(app) + std::max(rho, eps);
+
+	if(app < 0){
+	  std::swap(sh, ch);
+	}
+
+	auto omega = rsqrt(ch*ch + sh*sh);
+	ch *= omega;
+	sh *= omega;
+	
+	return {ch, sh};
+  }
+
+
+  //Q is the rot matrix defined by quaternion (ch, . . . sh .. . ) where sh is coord i
+  //specialized for each i
+  template<int i>
+	inline void givensQTB(double* B, double ch, double sh);
+
+  template<>
+	inline void givensQTB<2>(double* B, double ch, double sh){
+	//quat is (ch, 0, 0, sh), rotation around Z axis
+	auto c = ch*ch - sh*sh;
+	auto s = 2*sh*ch;
+	//Q = [ c -s 0; s c 0; 0 0 1]
+	
+	auto newb00 = B[0]*c + B[3]*s;
+	auto newb01 = B[1]*c + B[4]*s;
+	auto newb02 = B[2]*c + B[5]*s;
+
+	auto newb10 = B[3]*c - B[0]*s; //should be 0... maybe don't compute?
+	auto newb11 = B[4]*c - B[1]*s;
+	auto newb12 = B[5]*c - B[2]*s;
+
+	B[0] = newb00;
+	B[1] = newb01;
+	B[2] = newb02;
+
+	B[3] = newb10;
+	B[4] = newb11;
+	B[5] = newb12;
+
+	
+  }
+
+  //This will be called after givensQTB<2>, so we know that
+  //B10 is 0... which actually doesn't matter since that row won't change
+  template<>
+	inline void givensQTB<1>(double* B, double ch, double sh){
+
+	auto c = ch*ch - sh*sh;
+	auto s = 2*sh*ch;
+	//Q = [c 0 s; 0 1 0; -s 0 c];
+	auto newb00 = B[0]*c - B[6]*s;
+	auto newb01 = B[1]*c - B[7]*s;
+	auto newb02 = B[2]*c - B[8]*s;
+
+	auto newb20 = B[0]*s + B[6]*c; //should be 0... maybe don't compute?
+	auto newb21 = B[1]*s + B[7]*c; 
+	auto newb22 = B[2]*s + B[8]*c;
+
+	B[0] = newb00;
+	B[1] = newb01;
+	B[2] = newb02;
+
+	B[6] = newb20;
+	B[7] = newb21;
+	B[8] = newb22;
+  }
+
+  //B10 and B20 are 0, so don't bother filling in/computing them :)
+  template<>
+	inline void givensQTB<0>(double* B, double ch, double sh){
+
+	auto c = ch*ch - sh*sh;
+	auto s = 2*ch*sh;
+
+
+	/* we may not need to compute the off diags since B should be diagonal
+	   after this step
+	 */
+	auto newb11 = B[4]*c + B[7]*s;
+	auto newb12 = B[5]*c + B[8]*s; 
+
+	auto newb21 = B[7]*c - B[4]*s;
+	auto newb22 = B[8]*c - B[5]*s;
+
+	B[4] = newb11;
+	B[5] = newb12;
+
+	B[7] = newb21;
+	B[8] = newb22;
+  }
   
 }
 
-
-inline void svd(double* matrix){
-
-  auto VQuat = jacobiDiagonalize(matrix);
-
-  auto AV = computeAV(matrix, VQuat.data());
+struct SVD{
+  std::array<double, 3> S;
+  std::array<double, 4> U, V;
+};
 
 
-  std::cout << AV[0] << ' ' << AV[1] << ' ' << AV[2] << '\n'
-			<< AV[3] << ' ' << AV[4] << ' ' << AV[5] << '\n'
-			<< AV[6] << ' ' << AV[7] << ' ' << AV[8] << std::endl;
+inline SVD svd(double* matrix, double eps = 1e-8){
+
+  auto V = jacobiDiagonalize(matrix);
+
+  auto AV = computeAV(matrix, V.data());
+
+
+  matDump(AV.data());
 
   std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
   std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
   std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
 
-  permuteColumns(AV.data(), VQuat.data());
+  permuteColumns(AV.data(), V.data());
 
   std::cout << "after permute columns " << std::endl;
-  
-  std::cout << AV[0] << ' ' << AV[1] << ' ' << AV[2] << '\n'
-			<< AV[3] << ' ' << AV[4] << ' ' << AV[5] << '\n'
-			<< AV[6] << ' ' << AV[7] << ' ' << AV[8] << std::endl;
+
+  matDump(AV.data());
 
   std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
   std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
   std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
 
 
-  auto AVCheck = computeAV(matrix, VQuat.data());
+  auto AVCheck = computeAV(matrix, V.data());
   std::cout << "AVCheck: " << std::endl;
 
-  std::cout << AVCheck[0] << ' ' << AVCheck[1] << ' ' << AVCheck[2] << '\n'
-			<< AVCheck[3] << ' ' << AVCheck[4] << ' ' << AVCheck[5] << '\n'
-			<< AVCheck[6] << ' ' << AVCheck[7] << ' ' << AVCheck[8] << std::endl;
+  matDump(AVCheck.data());
 
+  std::array<double,4> U {{1, 0, 0, 0}};
+
+  {
+	auto givens = computeGivensQR<1,0>(AV.data(), eps);
+
+	givensQTB<2>(AV.data(), givens.first, givens.second);
+	quatTimesEqualCoordinateAxis<2>(U.data(), givens.first, givens.second);
+	
+	std::cout << "after givens 1,0" << std::endl;
+	matDump(AV.data());
+  }
+
+  {
+	auto givens = computeGivensQR<2,0>(AV.data(), eps);
+
+	//the sign of the sine should be swapped for this axis:
+	givensQTB<1>(AV.data(), givens.first, -givens.second);
+	quatTimesEqualCoordinateAxis<1>(U.data(), givens.first, -givens.second);
+	
+	std::cout << "after givens 2,0" << std::endl;
+	matDump(AV.data());
+  }
+  
+  {
+	auto givens = computeGivensQR<2,1>(AV.data(), eps);
+	
+	givensQTB<0>(AV.data(), givens.first, givens.second);
+	quatTimesEqualCoordinateAxis<0>(U.data(), givens.first, givens.second);
+	
+	std::cout << "after givens 2,1" << std::endl;
+	matDump(AV.data());
+  }
+
+  quatDump(U.data());
+
+  std::array<double, 3> S{AV[0], AV[4], AV[8]};
+  return SVD{S, U, V};
+  
+}
+
+//U, V as quaternions in s, x, y, z order
+//S as a vec3 
+inline std::array<double,9> reconstructMatrix(double* U, double* S, double* V){
+
+  //compute S * V^T 
+  
+  auto a = 1 - 2*(V[2]*V[2] + V[3]*V[3]);
+  auto b = 2*(V[1]*V[2] - V[3]*V[0]);
+  auto c = 2*(V[1]*V[3] + V[2]*V[0]);
+  
+  auto d = 2*(V[1]*V[2] + V[3]*V[0]);
+  auto e = 1 - 2*(V[1]*V[1] + V[3]*V[3]);
+  auto f = 2*(V[2]*V[3] - V[1]*V[0]);
+  
+  auto g = 2*(V[1]*V[3] - V[2]*V[0]);
+  auto h = 2*(V[2]*V[3] + V[1]*V[0]);
+  auto i = 1 - 2*(V[1]*V[1] + V[2]*V[2]);
+
+  std::array<double,9> SVT;
+  SVT[0] = S[0]*a;
+  SVT[1] = S[0]*d;
+  SVT[2] = S[0]*g;
+
+  SVT[3] = S[1]*b;
+  SVT[4] = S[1]*e;
+  SVT[5] = S[1]*h;
+
+  SVT[6] = S[2]*c;
+  SVT[7] = S[2]*f;
+  SVT[8] = S[2]*i;
+
+  //compute U 
+  
+  a = 1 - 2*(U[2]*U[2] + U[3]*U[3]);
+  b = 2*(U[1]*U[2] - U[3]*U[0]);
+  c = 2*(U[1]*U[3] + U[2]*U[0]);
+  
+  d = 2*(U[1]*U[2] + U[3]*U[0]);
+  e = 1 - 2*(U[1]*U[1] + U[3]*U[3]);
+  f = 2*(U[2]*U[3] - U[1]*U[0]);
+  
+  g = 2*(U[1]*U[3] - U[2]*U[0]);
+  h = 2*(U[2]*U[3] + U[1]*U[0]);
+  i = 1 - 2*(U[1]*U[1] + U[2]*U[2]);
+  
+  std::array<double, 9> ret;
+
+  ret[0] = SVT[0]*a + SVT[3]*b + SVT[6]*c;
+  ret[1] = SVT[1]*a + SVT[4]*b + SVT[7]*c;
+  ret[2] = SVT[2]*a + SVT[5]*b + SVT[8]*c;
+  
+  ret[3] = SVT[0]*d + SVT[3]*e + SVT[6]*f;
+  ret[4] = SVT[1]*d + SVT[4]*e + SVT[7]*f;
+  ret[5] = SVT[2]*d + SVT[5]*e + SVT[8]*f;
+  
+  ret[6] = SVT[0]*g + SVT[3]*h + SVT[6]*i;
+  ret[7] = SVT[1]*g + SVT[4]*h + SVT[7]*i;
+  ret[8] = SVT[2]*g + SVT[5]*h + SVT[8]*i;
+  
+  matDump(ret.data());
+
+  return ret;
   
 }

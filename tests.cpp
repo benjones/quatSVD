@@ -17,7 +17,9 @@ int main(){
 	d /= ds;
 	}*/
   std::cout << std::setprecision(12);
-  svd(matrix);
+  auto res = svd(matrix);
 
+  reconstructMatrix(res.U.data(), res.S.data(), res.V.data());
+  
   return 0;
 }
