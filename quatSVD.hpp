@@ -104,7 +104,7 @@ namespace{
 	  //assume q is unit
 	  /*
 		R = [a b c; d e f; g h i]
-	   */
+	  */
 
 	  //	  std::cout << "qnorm in full conju: " <<
 	  //		(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]) << std::endl;
@@ -122,22 +122,6 @@ namespace{
 	  auto h = 2*(q[2]*q[3] + q[1]*q[0]);
 	  auto i = 1 - 2*(q[1]*q[1] + q[2]*q[2]);
 
-
-	  /*	  std::cout << "quat matrix checks" << std::endl;
-	  std::cout << (a*a + d*d + g*g) << std::endl;
-	  std::cout << (b*b + d*d + h*h) << std::endl;
-	  std::cout << (c*c + f*f + i*i) << std::endl;
-
-	  std::cout << (a*c + d*f + g*i) << std::endl;
-	  std::cout << (b*c + e*f + h*i) << std::endl;
-	  std::cout << (a*b + d*e + g*h) << std::endl;
-	  */  
-	  
-	  /* Q^T * S * Q = [a d g; b e h; c f i] * S * [a b c; d e f; g h i]
-		 = [ a s11 + d s12 + g s13, a s12 + d s22 + g s23 + a s13 + d s23 + g s33]
-		 [ b s11 + e s12 + h s13,  b s12 + e s22 + h s23,   b s13 + e s23 + h s33]
-		 [ c s22+ f s12 + i s13,  c s12 + f s22 + i s23,  c s13 + f swe + i s 33] *[a b c; d e f; g h i]
-	  */
 
 	  //B = Q^T S
 	  const auto& me = *this;
@@ -169,17 +153,6 @@ namespace{
 	  (*this)(0,2) = new13;
 	  (*this)(1,2) = new23;
 
-
-	  /*
-	  auto new21 = b*B11 + e*B12 + h*B13;
-	  auto new31 = c*B11 + f*B12 + i*B13;
-	  auto new32 = c*B21 + f*B22 + i*B23;
-
-
-	  std::cout << "21 vs 12: " << new12 << ' ' << new21 << std::endl;
-	  std::cout << "31 vs 13: " << new13 << ' ' << new31 << std::endl;
-	  std::cout << "23 vs 32: " << new23 << ' ' << new32 << std::endl;
-	  */
 	  
 	}
 	
@@ -190,10 +163,6 @@ namespace{
   template<>
 	inline void Symm3x3::quatConjugate<0,1>(double c, double s){
 	//rotate about the z axis
-	
-	auto realC = c*c - s*s;
-	auto realS = 2*s*c;
-	
 	/*
 	  Q^T * *this * Q
 	  [ c s 0; -s c 0; 0 0 1] * [ S ] * [c -s 0; s c 0; 0 0 1]
@@ -205,13 +174,14 @@ namespace{
 	  =  [ c c s11 + c s s12 + c s s12 + s s s22;  -c s s11 - s s s12 + c c s12 + c s s22;  c s13 + s s23]
 	  [ -c s s11 + c c s12 -s s s12 + s c s22;  s s s11 - c s s12 - c s s12 + c c s22;  -s s13 + c s23]
 	  [ c s13 + s s23                        ;  -s s13 + c s23                       ;  s33           ]
-	  
-	  
 	*/
+	auto realC = c*c - s*s;
+	auto realS = 2*s*c;
 	
 	auto cs = realS*realC; //used a bunch of places
 	auto cc = realC*realC;
 	auto ss = realS*realS;
+
 	const auto& me = *this;
 	auto newS11 = cc * me(0,0) + 2*cs*me(0,1) + ss*me(1,1);
 	auto newS22 = ss * me(0,0) - 2*cs*me(0,1) + cc*me(1,1);
@@ -233,10 +203,6 @@ namespace{
 	//quat looks like (ch, 0, sh, 0)
 	//R = [ 1 - 2*s*s, 0, 2*c*s;  0, 1, 0;  -2*c*s, 0, 1 - 2*s*s]
 	//or:  [C, 0, S; 0 1 0; -S, 0, C]   where C = 1 - 2*s*s == c*c - s*s, and S = 2*c*s
-
-	auto realC = c*c - s*s;
-	auto realS = 2*s*c;
-	
 	/*
 	  Q^T * *this * Q
 	  [ c 0 -s; - 1 -; s 0 c] * [ S ] * [c 0 s; 0 1 0; -s 0 c]]
@@ -248,9 +214,9 @@ namespace{
 	  =  [ c c s11 - c s s13 - c s s13 + s s s33; c s12 - s s23;    c s s11 - s s s13 + c c s13 - c s s33]
 	  [ c s12 - s s23;                            s22;              s s12 + c s23]
 	  [ c s s11 + c c s13 - s s s13 - c s s33;      s s12 + c s23;  s s s11 + c s s13 + c s s13 + c c s33  ]
-	  
-	  
 	*/
+	auto realC = c*c - s*s;
+	auto realS = 2*s*c;
 	
 	auto cs = realS*realC; //used a bunch of places
 	auto cc = realC*realC;
@@ -323,7 +289,7 @@ namespace{
 
 
   
-  static const double gamma =3 + 2*std::sqrt(2);
+  static constexpr double gamma =3 + 2*M_SQRT2;
   static const double sinBackup = std::sin(M_PI/8);
   static const double cosBackup = std::cos(M_PI/8);
 
@@ -342,7 +308,8 @@ namespace{
 	
 	double sh = .5*B(p, q);                 
 
-	std::cout << "guesses for ch " << ch << " sh " << sh << " norm: " << ch*ch + sh*sh << std::endl;
+	std::cout << "guesses for ch " << ch << " sh " << sh
+			  << " norm: " << ch*ch + sh*sh << std::endl;
 
 	double omega = rsqrt(ch*ch + sh*sh);
 	ch *= omega;
@@ -366,7 +333,7 @@ namespace{
 	/* 
 	   s1 * v2 + s2* v1 + v1 x v2
 
-	 */
+	*/
 	auto newS = lhs[0]*rhs[0] - lhs[1]*rhs[1] - lhs[2]*rhs[2] - lhs[3]*rhs[3];
 
 	auto newX = lhs[0]*rhs[1] + rhs[0]*lhs[1] + lhs[2]*rhs[3] - rhs[2]*lhs[3];
@@ -381,12 +348,12 @@ namespace{
   }
 
   template<int i>
-inline void quatTimesEqualCoordinateAxis(double* lhs, double c, double s){
+	inline void quatTimesEqualCoordinateAxis(double* lhs, double c, double s){
 	//the quat we're multiplying by is (c, ? s ?)  where s is in slot i of the vector part,
 	//and the other entries are 0
-
+	
 	auto newS = lhs[0]*c - lhs[i+1]*s;
-
+	
 	float newVals[3];
 	//the s2*v1 part
 	newVals[0] = c*lhs[1];  
@@ -402,8 +369,6 @@ inline void quatTimesEqualCoordinateAxis(double* lhs, double c, double s){
 	lhs[1] = newVals[0];
 	lhs[2] = newVals[1];
 	lhs[3] = newVals[2];
-
-	//std::cout << "q*=, " << i << " norm: " << (lhs[0]*lhs[0] + lhs[1]*lhs[1] + lhs[2]*lhs[2] + lhs[3]*lhs[3]) << std::endl;
 	
   }
   
@@ -419,94 +384,9 @@ inline void quatTimesEqualCoordinateAxis(double* lhs, double c, double s){
   inline void quatDump(double* q){
 	std::cout << "quat: " << q[0] << ' ' << q[1] << ' '<< q[2] << ' ' << q[3] << std::endl;
   }
-}
 
 
-inline void svd(double* matrix){
-
-  /*  
-
-  
-  {
-	Symm3x3 ATA(matrix);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
-	
-
-	std::array<double, 4> V {{1,0,0,0}};
-	auto givens = givensAngles<0,1>(ATA);
-	ATA.quatConjugate<0,1>(givens.first, givens.second);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
-	
-	quatTimesEqualCoordinateAxis<2>(V.data(), givens.first, givens.second);
-	quatDump(V.data());
-	
-	{
-	  Symm3x3 check(matrix);
-	  check.quatConjugateFull(V.data());
-	  std::cout << "check" << std::endl;
-	  check.dump();
-	  std::cout << std::endl;
-	}
-  }
-
-  {
-	Symm3x3 ATA(matrix);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
-	
-
-	std::array<double, 4> V {{1,0,0,0}};
-	auto givens = givensAngles<0,2>(ATA);
-	ATA.quatConjugate<0,2>(givens.first, givens.second);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
-	
-	quatTimesEqualCoordinateAxis<1>(V.data(), givens.first, givens.second);
-	quatDump(V.data());
-	
-	{
-	  Symm3x3 check(matrix);
-	  check.quatConjugateFull(V.data());
-	  std::cout << "check" << std::endl;
-	  check.dump();
-	  std::cout << std::endl;
-	}
-  }
-
-    {
-	Symm3x3 ATA(matrix);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
-	
-
-	std::array<double, 4> V {{1,0,0,0}};
-	auto givens = givensAngles<1,2>(ATA);
-	ATA.quatConjugate<1,2>(givens.first, givens.second);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
-	
-	quatTimesEqualCoordinateAxis<0>(V.data(), givens.first, givens.second);
-	quatDump(V.data());
-	
-	{
-	  Symm3x3 check(matrix);
-	  check.quatConjugateFull(V.data());
-	  std::cout << "check" << std::endl;
-	  check.dump();
-	  std::cout << std::endl;
-	}
-  }
-
-	*/  
-
+  inline std::array<double, 4> jacobiDiagonalize(double* matrix){
 	Symm3x3 ATA(matrix);
 	ATA.dump();
 	std::cout << ATA.frobeneius() << std::endl;
@@ -523,104 +403,227 @@ inline void svd(double* matrix){
 	  std::cout << ATA.frobeneius() << std::endl;
 	  std::cout << ATA.diagMag() << std::endl;
 
-	//	std::cout << "quat before" << std::endl;
-	//	quatDump(V.data());
-	quatTimesEqualCoordinateAxis<2>(V.data(), givens.first, givens.second);
-	//	std::cout << "quat after" << std::endl;
-	quatDump(V.data());
-	/*	{
-	std::array<double,4> qUndo = V;
-	quatTimesEqualCoordinateAxis<2>(qUndo.data(), givens.first, -givens.second);
-	std::cout << "times quatInverse: " << std::endl;
-	quatDump(qUndo.data());
-	}*/
+	  //	std::cout << "quat before" << std::endl;
+	  //	quatDump(V.data());
+	  quatTimesEqualCoordinateAxis<2>(V.data(), givens.first, givens.second);
+	  //	std::cout << "quat after" << std::endl;
+	  quatDump(V.data());
+	  /*	{
+			std::array<double,4> qUndo = V;
+			quatTimesEqualCoordinateAxis<2>(qUndo.data(), givens.first, -givens.second);
+			std::cout << "times quatInverse: " << std::endl;
+			quatDump(qUndo.data());
+			}*/
 
-	/*	{
-	  std::cout << "unconjugating" << std::endl;
-	  Symm3x3 check = ATA;
-	  check.quatConjugate<0,1>(givens.first, -givens.second);
-	  check.dump();
-	  std::cout << std::endl;
-	  }*/
+	  /*	{
+			std::cout << "unconjugating" << std::endl;
+			Symm3x3 check = ATA;
+			check.quatConjugate<0,1>(givens.first, -givens.second);
+			check.dump();
+			std::cout << std::endl;
+			}*/
 
 	
-	/*{
-	  Symm3x3 check(matrix);
-	  check.quatConjugateFull(V.data());
-	  std::cout << "check" << std::endl;
-	  check.dump();
-	  std::cout << "check frob: " << check.frobeneius() << std::endl;
-	  std::cout << "diag: " << check.diagMag() << std::endl;
-	  std::cout << std::endl;
-	  }*/
+	  /*{
+		Symm3x3 check(matrix);
+		check.quatConjugateFull(V.data());
+		std::cout << "check" << std::endl;
+		check.dump();
+		std::cout << "check frob: " << check.frobeneius() << std::endl;
+		std::cout << "diag: " << check.diagMag() << std::endl;
+		std::cout << std::endl;
+		}*/
 
-	std::cout << std::endl << std::endl;
-	givens = givensAngles<1,2>(ATA);
-	ATA.quatConjugate<1,2>(givens.first, givens.second);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
+	  std::cout << std::endl << std::endl;
+	  givens = givensAngles<1,2>(ATA);
+	  ATA.quatConjugate<1,2>(givens.first, givens.second);
+	  ATA.dump();
+	  std::cout << ATA.frobeneius() << std::endl;
+	  std::cout << ATA.diagMag() << std::endl;
 
-	//	std::cout << "quat before" << std::endl;
-	//	quatDump(V.data());
+	  //	std::cout << "quat before" << std::endl;
+	  //	quatDump(V.data());
 
-	quatTimesEqualCoordinateAxis<0>(V.data(), givens.first, givens.second);
-	std::cout << "quat after " << std::endl;
-	quatDump(V.data());
+	  quatTimesEqualCoordinateAxis<0>(V.data(), givens.first, givens.second);
+	  std::cout << "quat after " << std::endl;
+	  quatDump(V.data());
 
-	/*{
-	std::array<double,4> qUndo = V;
-	quatTimesEqualCoordinateAxis<0>(qUndo.data(), givens.first, -givens.second);
-	std::cout << "times quatInverse: " << std::endl;;
+	  /*{
+		std::array<double,4> qUndo = V;
+		quatTimesEqualCoordinateAxis<0>(qUndo.data(), givens.first, -givens.second);
+		std::cout << "times quatInverse: " << std::endl;;
 	
-	quatDump(qUndo.data());
-	}
-	{
-	  Symm3x3 check(matrix);
-	  check.quatConjugateFull(V.data());
-	  std::cout << "check" << std::endl;
-	  check.dump();
-	  std::cout << "check frob: " << check.frobeneius() << std::endl;
-	  std::cout << "diag: " << check.diagMag() << std::endl;
+		quatDump(qUndo.data());
+		}
+		{
+		Symm3x3 check(matrix);
+		check.quatConjugateFull(V.data());
+		std::cout << "check" << std::endl;
+		check.dump();
+		std::cout << "check frob: " << check.frobeneius() << std::endl;
+		std::cout << "diag: " << check.diagMag() << std::endl;
 	  
-	  std::cout << std::endl;
-	  }*/
-	std::cout << std::endl << std::endl;
-	givens = givensAngles<0,2>(ATA);
-	ATA.quatConjugate<0,2>(givens.first, givens.second);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
+		std::cout << std::endl;
+		}*/
+	  std::cout << std::endl << std::endl;
+	  givens = givensAngles<0,2>(ATA);
+	  ATA.quatConjugate<0,2>(givens.first, givens.second);
+	  ATA.dump();
+	  std::cout << ATA.frobeneius() << std::endl;
+	  std::cout << ATA.diagMag() << std::endl;
 
 
-	//	std::cout << "quat before" << std::endl;
-	//	quatDump(V.data());
+	  //	std::cout << "quat before" << std::endl;
+	  //	quatDump(V.data());
 
-	quatTimesEqualCoordinateAxis<1>(V.data(), givens.first, givens.second);
-	std::cout << "quat after " << std::endl;
-	quatDump(V.data());
-	/*	{
-	std::array<double,4> qUndo = V;
-	quatTimesEqualCoordinateAxis<1>(qUndo.data(), givens.first, -givens.second);
-	std::cout << "times quatInverse: " << std::endl;;
-	quatDump(qUndo.data());
-	}
-	{
-	  Symm3x3 check(matrix);
-	  check.quatConjugateFull(V.data());
-	  std::cout << "check" << std::endl;
-	  check.dump();
-	  std::cout << "check frob: " << check.frobeneius() << std::endl;
-	  std::cout << "diag: " << check.diagMag() << std::endl;
+	  quatTimesEqualCoordinateAxis<1>(V.data(), givens.first, givens.second);
+	  std::cout << "quat after " << std::endl;
+	  quatDump(V.data());
+	  /*	{
+			std::array<double,4> qUndo = V;
+			quatTimesEqualCoordinateAxis<1>(qUndo.data(), givens.first, -givens.second);
+			std::cout << "times quatInverse: " << std::endl;;
+			quatDump(qUndo.data());
+			}
+			{
+			Symm3x3 check(matrix);
+			check.quatConjugateFull(V.data());
+			std::cout << "check" << std::endl;
+			check.dump();
+			std::cout << "check frob: " << check.frobeneius() << std::endl;
+			std::cout << "diag: " << check.diagMag() << std::endl;
 	  
-	  std::cout << std::endl;
-	  }*/
+			std::cout << std::endl;
+			}*/
+	}
+
+	Symm3x3 check(matrix);
+	check.quatConjugateFull(V.data());
+	std::cout << "final check" << std::endl;
+	check.dump();
+
+	return V;
+	
   }
 
-  Symm3x3 check(matrix);
-  check.quatConjugateFull(V.data());
-  std::cout << "final check" << std::endl;
-  check.dump();
-  
+  inline std::array<double, 9> computeAV(double* matrix, double* V){
+	//compute quaternion matrix from V
+	//V ->  [[a, b, c], [d, e, f], [g, h, i]]
+	auto a = 1 - 2*(V[2]*V[2] + V[3]*V[3]);
+	auto b = 2*(V[1]*V[2] - V[3]*V[0]);
+	auto c = 2*(V[1]*V[3] + V[2]*V[0]);
+	
+	auto d = 2*(V[1]*V[2] + V[3]*V[0]);
+	auto e = 1 - 2*(V[1]*V[1] + V[3]*V[3]);
+	auto f = 2*(V[2]*V[3] - V[1]*V[0]);
+	
+	auto g = 2*(V[1]*V[3] - V[2]*V[0]);
+	auto h = 2*(V[2]*V[3] + V[1]*V[0]);
+	auto i = 1 - 2*(V[1]*V[1] + V[2]*V[2]);
 
+	std::array<double, 9> ret;
+
+	ret[0] = a*matrix[0]  + d*matrix[1]   + g*matrix[2] ;
+	ret[1] = b*matrix[0]  + e*matrix[1]   + h*matrix[2] ;
+	ret[2] = c*matrix[0]  + f*matrix[1]   + i*matrix[2] ;
+
+	ret[3] = a*matrix[3]  + d*matrix[4]   + g*matrix[5] ;
+	ret[4] = b*matrix[3]  + e*matrix[4]   + h*matrix[5] ;
+	ret[5] = c*matrix[3]  + f*matrix[4]   + i*matrix[5] ;
+	
+	ret[6] = a*matrix[6]  + d*matrix[7]   + g*matrix[8] ;
+	ret[7] = b*matrix[6]  + e*matrix[7]   + h*matrix[8] ;
+	ret[8] = c*matrix[6]  + f*matrix[7]   + i*matrix[8] ;
+
+	return ret;
+	
+  }
+
+
+  template <int i, int j>
+	inline void swapColsNeg(double* B){
+
+	double tmp = -B[i];
+	B[i] = B[j];
+	B[j] = tmp;
+
+	tmp = -B[i +3];
+	B[i+3] = B[j +3];
+	B[j+3] = tmp;
+
+	tmp = -B[i+6];
+	B[i+6] = B[j+6];
+	B[j+6] = tmp;
+  
+  }
+  
+  inline void permuteColumns(double* B, double* V){
+
+	double mags[3];
+	mags[0] = B[0]*B[0] + B[3]*B[3] + B[6]*B[6];
+	mags[1] = B[1]*B[1] + B[4]*B[4] + B[7]*B[7];
+	mags[2] = B[2]*B[2] + B[5]*B[5] + B[8]*B[8];
+
+	if(mags[0] < mags[1]){
+	  swapColsNeg<0,1>(B);
+	  //swaps cols 0 and 1 in the corresponding matrix form, negates the new col 1
+	  quatTimesEqualCoordinateAxis<2>(V, M_SQRT1_2, M_SQRT1_2);
+	  std::swap(mags[0], mags[1]);
+	}
+
+	if(mags[0] < mags[2]){
+	  swapColsNeg<0,2>(B);
+	  quatTimesEqualCoordinateAxis<1>(V, M_SQRT1_2, -M_SQRT1_2 );
+	  std::swap(mags[0], mags[2]);
+	}
+
+	if(mags[1] < mags[2]){
+	  swapColsNeg<1,2>(B);
+	  quatTimesEqualCoordinateAxis<0>(V, M_SQRT1_2, M_SQRT1_2);
+	  //don't bother swapping the mags anymore... don't care
+	}
+	
+	
+  }
+
+  
+}
+
+
+inline void svd(double* matrix){
+
+  auto VQuat = jacobiDiagonalize(matrix);
+
+  auto AV = computeAV(matrix, VQuat.data());
+
+
+  std::cout << AV[0] << ' ' << AV[1] << ' ' << AV[2] << '\n'
+			<< AV[3] << ' ' << AV[4] << ' ' << AV[5] << '\n'
+			<< AV[6] << ' ' << AV[7] << ' ' << AV[8] << std::endl;
+
+  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
+  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
+  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
+
+  permuteColumns(AV.data(), VQuat.data());
+
+  std::cout << "after permute columns " << std::endl;
+  
+  std::cout << AV[0] << ' ' << AV[1] << ' ' << AV[2] << '\n'
+			<< AV[3] << ' ' << AV[4] << ' ' << AV[5] << '\n'
+			<< AV[6] << ' ' << AV[7] << ' ' << AV[8] << std::endl;
+
+  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
+  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
+  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
+
+
+  auto AVCheck = computeAV(matrix, VQuat.data());
+  std::cout << "AVCheck: " << std::endl;
+
+  std::cout << AVCheck[0] << ' ' << AVCheck[1] << ' ' << AVCheck[2] << '\n'
+			<< AVCheck[3] << ' ' << AVCheck[4] << ' ' << AVCheck[5] << '\n'
+			<< AVCheck[6] << ' ' << AVCheck[7] << ' ' << AVCheck[8] << std::endl;
+
+  
 }
