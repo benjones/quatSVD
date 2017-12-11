@@ -21,7 +21,17 @@
 //You should #include eigen headers yourself before including this file
 
 namespace QuatSVD{
+  /* this is the API (functions implemented below)
+  template<typename T>
+  inline SVD<T> svd(T* matrix, T eps = (.5*std::numeric_limits<T>::epsilon()));
 
+  template<typename Derived, typename T = typename Derived::Scalar>
+  inline EigenSVD<T> svd(const Eigen::DenseBase<Derived>& matrix,
+  T eps = (.5*std::numeric_limits<T>::epsilon()));
+  */
+
+
+  
   template<typename T>
   struct SVD{
 	std::array<T, 3> S;

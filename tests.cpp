@@ -174,6 +174,7 @@ void eigenCorrectnessTests(int N){
   
 }
 
+
 template<typename T>
 void eigenPerformanceTests(int N){
   std::vector<Eigen::Matrix<T,3,3>> matrices;
@@ -196,6 +197,30 @@ void eigenPerformanceTests(int N){
   std::cout << "dummy value to outsmart optimizer: " << dummy << std::endl;
 
 
+}
+
+template<typename T>
+void eigenJacobiTimings(int N){
+  std::vector<Eigen::Matrix<T,3,3>> matrices;
+  matrices.reserve(N);
+  for(int i = 0; i < N; ++i){
+	matrices.push_back(randomEigenMatrix<T>());
+  }
+  
+  auto start = std::chrono::high_resolution_clock::now();
+
+  double dummy = 0;
+  for(int i = 0; i < N; ++i){
+	Eigen::JacobiSVD<Eigen::Matrix<T, 3, 3>> esvd(matrices[i], Eigen::ComputeFullU | Eigen::ComputeFullV);
+	dummy += esvd.singularValues()(0);
+	
+  }
+
+  auto stop = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = stop-start;
+  std::cout << "time to compute " << N << " SVDs with eigen " << diff.count() << " s\n";
+  std::cout << "dummy value to outsmart optimzer: " << dummy << std::endl;
+  
 }
 
 
@@ -229,6 +254,12 @@ int main(){
   eigenCorrectnessTests<float>(N);
   eigenPerformanceTests<float>(N);
 
+  std::cout << "eigen jacobi timings" << std::endl;
+  std::cout << "doubles" << std::endl;
+  eigenJacobiTimings<double>(N);
+  std::cout << "floats" << std::endl;
+  eigenJacobiTimings<float>(N);
+  
   #endif
   
   
