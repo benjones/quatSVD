@@ -301,7 +301,7 @@ namespace{
   //returns c, s, the givens angles
   template<int p, int q>
 	inline std::pair<double,double> givensAngles(const Symm3x3& B){
-	std::cout << "computing angles for p: " << p << " q: " << q << std::endl;
+	//	std::cout << "computing angles for p: " << p << " q: " << q << std::endl;
 	
 	double ch;// = B(p,p) - B(q,q);
 	//sign is different depending on which element we're trying to eliminate
@@ -311,8 +311,8 @@ namespace{
 	
 	double sh = .5*B(p, q);                 
 
-	std::cout << "guesses for ch " << ch << " sh " << sh
-			  << " norm: " << ch*ch + sh*sh << std::endl;
+	//	std::cout << "guesses for ch " << ch << " sh " << sh
+	//			  << " norm: " << ch*ch + sh*sh << std::endl;
 
 	double omega = rsqrt(ch*ch + sh*sh);
 	ch *= omega;
@@ -323,8 +323,8 @@ namespace{
 	ch = approxValid ? ch : cosBackup;
 	sh = approxValid ? sh : sinBackup;
 	
-	std::cout << "approx valid? " << approxValid << std::endl;
-	std::cout << "ch " << ch << " sh " << sh << " norm: " << ch*ch + sh*sh << std::endl;
+	//	std::cout << "approx valid? " << approxValid << std::endl;
+	//	std::cout << "ch " << ch << " sh " << sh << " norm: " << ch*ch + sh*sh << std::endl;
 	
 	return {ch, sh};
   }
@@ -357,7 +357,7 @@ namespace{
 	
 	auto newS = lhs[0]*c - lhs[i+1]*s;
 	
-	float newVals[3];
+	double newVals[3];
 	//the s2*v1 part
 	newVals[0] = c*lhs[1];  
 	newVals[1] = c*lhs[2];
@@ -397,26 +397,26 @@ namespace{
 
   inline std::array<double, 4> jacobiDiagonalize(double* matrix){
 	Symm3x3 ATA(matrix);
-	ATA.dump();
-	std::cout << ATA.frobeneius() << std::endl;
-	std::cout << ATA.diagMag() << std::endl;
+	//	ATA.dump();
+	//	std::cout << ATA.frobeneius() << std::endl;
+	//	std::cout << ATA.diagMag() << std::endl;
   	std::array<double, 4> V {{1,0,0,0}};
 
 	for(int i = 0; i < 4; ++i){
 
 
-	  std::cout << std::endl << std::endl;
+	  //	  std::cout << std::endl << std::endl;
 	  auto givens = givensAngles<0,1>(ATA);
 	  ATA.quatConjugate<0,1>(givens.first, givens.second);
-	  ATA.dump();
-	  std::cout << ATA.frobeneius() << std::endl;
-	  std::cout << ATA.diagMag() << std::endl;
+	  //	  ATA.dump();
+	  //	  std::cout << ATA.frobeneius() << std::endl;
+	  //	  std::cout << ATA.diagMag() << std::endl;
 
 	  //	std::cout << "quat before" << std::endl;
 	  //	quatDump(V.data());
 	  quatTimesEqualCoordinateAxis<2>(V.data(), givens.first, givens.second);
 	  //	std::cout << "quat after" << std::endl;
-	  quatDump(V.data());
+	  //	  quatDump(V.data());
 	  /*	{
 			std::array<double,4> qUndo = V;
 			quatTimesEqualCoordinateAxis<2>(qUndo.data(), givens.first, -givens.second);
@@ -443,19 +443,19 @@ namespace{
 		std::cout << std::endl;
 		}*/
 
-	  std::cout << std::endl << std::endl;
+	  //	  std::cout << std::endl << std::endl;
 	  givens = givensAngles<1,2>(ATA);
 	  ATA.quatConjugate<1,2>(givens.first, givens.second);
-	  ATA.dump();
-	  std::cout << ATA.frobeneius() << std::endl;
-	  std::cout << ATA.diagMag() << std::endl;
+	  //	  ATA.dump();
+	  //	  std::cout << ATA.frobeneius() << std::endl;
+	  //	  std::cout << ATA.diagMag() << std::endl;
 
 	  //	std::cout << "quat before" << std::endl;
 	  //	quatDump(V.data());
 
 	  quatTimesEqualCoordinateAxis<0>(V.data(), givens.first, givens.second);
-	  std::cout << "quat after " << std::endl;
-	  quatDump(V.data());
+	  //	  std::cout << "quat after " << std::endl;
+	  //	  quatDump(V.data());
 
 	  /*{
 		std::array<double,4> qUndo = V;
@@ -474,20 +474,20 @@ namespace{
 	  
 		std::cout << std::endl;
 		}*/
-	  std::cout << std::endl << std::endl;
+	  //	  std::cout << std::endl << std::endl;
 	  givens = givensAngles<0,2>(ATA);
 	  ATA.quatConjugate<0,2>(givens.first, givens.second);
-	  ATA.dump();
-	  std::cout << ATA.frobeneius() << std::endl;
-	  std::cout << ATA.diagMag() << std::endl;
+	  //	  ATA.dump();
+	  //	  std::cout << ATA.frobeneius() << std::endl;
+	  //	  std::cout << ATA.diagMag() << std::endl;
 
 
 	  //	std::cout << "quat before" << std::endl;
 	  //	quatDump(V.data());
 
 	  quatTimesEqualCoordinateAxis<1>(V.data(), givens.first, givens.second);
-	  std::cout << "quat after " << std::endl;
-	  quatDump(V.data());
+	  //	  std::cout << "quat after " << std::endl;
+	  //	  quatDump(V.data());
 	  /*	{
 			std::array<double,4> qUndo = V;
 			quatTimesEqualCoordinateAxis<1>(qUndo.data(), givens.first, -givens.second);
@@ -506,10 +506,10 @@ namespace{
 			}*/
 	}
 
-	Symm3x3 check(matrix);
-	check.quatConjugateFull(V.data());
-	std::cout << "final check" << std::endl;
-	check.dump();
+	//	Symm3x3 check(matrix);
+	//	check.quatConjugateFull(V.data());
+	//	std::cout << "final check" << std::endl;
+	//	check.dump();
 
 	return V;
 	
@@ -635,7 +635,7 @@ namespace{
 	auto newb01 = B[1]*c + B[4]*s;
 	auto newb02 = B[2]*c + B[5]*s;
 
-	auto newb10 = B[3]*c - B[0]*s; //should be 0... maybe don't compute?
+	auto newb10 = 0;//B[3]*c - B[0]*s; //should be 0... maybe don't compute?
 	auto newb11 = B[4]*c - B[1]*s;
 	auto newb12 = B[5]*c - B[2]*s;
 
@@ -662,7 +662,7 @@ namespace{
 	auto newb01 = B[1]*c - B[7]*s;
 	auto newb02 = B[2]*c - B[8]*s;
 
-	auto newb20 = B[0]*s + B[6]*c; //should be 0... maybe don't compute?
+	auto newb20 = 0;// B[0]*s + B[6]*c; //should be 0... maybe don't compute?
 	auto newb21 = B[1]*s + B[7]*c; 
 	auto newb22 = B[2]*s + B[8]*c;
 
@@ -687,15 +687,15 @@ namespace{
 	   after this step
 	 */
 	auto newb11 = B[4]*c + B[7]*s;
-	auto newb12 = B[5]*c + B[8]*s; 
+	//auto newb12 = B[5]*c + B[8]*s; 
 
-	auto newb21 = B[7]*c - B[4]*s;
+	//auto newb21 = B[7]*c - B[4]*s;
 	auto newb22 = B[8]*c - B[5]*s;
 
 	B[4] = newb11;
-	B[5] = newb12;
+	//B[5] = newb12;
 
-	B[7] = newb21;
+	//B[7] = newb21;
 	B[8] = newb22;
   }
   
@@ -714,27 +714,27 @@ inline SVD svd(double* matrix, double eps = 1e-8){
   auto AV = computeAV(matrix, V.data());
 
 
-  matDump(AV.data());
+  //  matDump(AV.data());
 
-  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
-  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
-  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
+  //  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
+  //  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
+  //  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
 
   permuteColumns(AV.data(), V.data());
 
-  std::cout << "after permute columns " << std::endl;
+  //  std::cout << "after permute columns " << std::endl;
 
-  matDump(AV.data());
+  //  matDump(AV.data());
 
-  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
-  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
-  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
+  //  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
+  //  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
+  //  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
 
 
-  auto AVCheck = computeAV(matrix, V.data());
-  std::cout << "AVCheck: " << std::endl;
+  //  auto AVCheck = computeAV(matrix, V.data());
+  //  std::cout << "AVCheck: " << std::endl;
 
-  matDump(AVCheck.data());
+  //  matDump(AVCheck.data());
 
   std::array<double,4> U {{1, 0, 0, 0}};
 
@@ -744,8 +744,8 @@ inline SVD svd(double* matrix, double eps = 1e-8){
 	givensQTB<2>(AV.data(), givens.first, givens.second);
 	quatTimesEqualCoordinateAxis<2>(U.data(), givens.first, givens.second);
 	
-	std::cout << "after givens 1,0" << std::endl;
-	matDump(AV.data());
+	//	std::cout << "after givens 1,0" << std::endl;
+	//	matDump(AV.data());
   }
 
   {
@@ -755,8 +755,8 @@ inline SVD svd(double* matrix, double eps = 1e-8){
 	givensQTB<1>(AV.data(), givens.first, -givens.second);
 	quatTimesEqualCoordinateAxis<1>(U.data(), givens.first, -givens.second);
 	
-	std::cout << "after givens 2,0" << std::endl;
-	matDump(AV.data());
+	//	std::cout << "after givens 2,0" << std::endl;
+	//	matDump(AV.data());
   }
   
   {
@@ -765,11 +765,11 @@ inline SVD svd(double* matrix, double eps = 1e-8){
 	givensQTB<0>(AV.data(), givens.first, givens.second);
 	quatTimesEqualCoordinateAxis<0>(U.data(), givens.first, givens.second);
 	
-	std::cout << "after givens 2,1" << std::endl;
-	matDump(AV.data());
+	//	std::cout << "after givens 2,1" << std::endl;
+	//	matDump(AV.data());
   }
 
-  quatDump(U.data());
+  //  quatDump(U.data());
 
   std::array<double, 3> S{AV[0], AV[4], AV[8]};
   return SVD{S, U, V};
@@ -835,8 +835,28 @@ inline std::array<double,9> reconstructMatrix(double* U, double* S, double* V){
   ret[7] = SVT[1]*g + SVT[4]*h + SVT[7]*i;
   ret[8] = SVT[2]*g + SVT[5]*h + SVT[8]*i;
   
-  matDump(ret.data());
+  //  matDump(ret.data());
 
   return ret;
+  
+}
+
+inline std::pair<double,double>
+computeErrors(double* matrix){
+
+  auto res = svd(matrix);
+
+  auto reconstruction = reconstructMatrix(res.U.data(), res.S.data(), res.V.data());
+
+  double errSquared = 0;
+  double maxError = 0;
+  for(int i = 0; i < 9; ++i){
+	auto e = matrix[i] - reconstruction[i];
+	e *= e;
+	errSquared += e;
+	if(e > maxError){ maxError = e;}
+  }
+
+  return {errSquared, maxError};
   
 }
