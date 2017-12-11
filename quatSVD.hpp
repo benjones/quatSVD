@@ -14,30 +14,60 @@
 #include <iostream>
 
 
-//from https://www.sebastiansylvan.com/post/scalarsseintrinsics/
-inline float rsqrt_fast(float x)
-{
-  return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x)));
-}
-inline float rsqrt(float x)
-{
-  float xrsqrt_est = rsqrt_fast(x);
-  return xrsqrt_est*(1.5f - x*0.5f*xrsqrt_est*xrsqrt_est); // NR iteration
-}
 
-inline double fast_sqrt(double x){
-  return x* rsqrt(x);
+//IMPORT USAGE NOTE.  IF YOU WANT TO USE THIS WITH EIGEN MATRICES/QUATERNIONS
+//UNCOMMENT THE NEXT LINE (You could add a -D flag for your build system... if you want
+//#define INCLUDE_QUATSVD_EIGEN_API
+//You should #include eigen headers yourself before including this file
+
+namespace QuatSVD{
+
+  template<typename T>
+  struct SVD{
+	std::array<T, 3> S;
+	std::array<T, 4> U, V;
+  };
+
+#ifdef INCLUDE_QUATSVD_EIGEN_API
+
+  template<typename T>
+  struct EigenSVD{
+	Eigen::Matrix<T, 3, 1> S;
+	Eigen::Quaternion<T> U,V;
+  };
+  
+#endif
 }
 
 
 //internal details
 namespace{
+  
+  //from https://www.sebastiansylvan.com/post/scalarsseintrinsics/
+  inline float rsqrt_fast(float x)
+  {
+	return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x)));
+  }
+  inline float rsqrt(float x)
+  {
+	//the above + 1 step of newton's method
+	float xrsqrt_est = rsqrt_fast(x);
+	return xrsqrt_est*(1.5f - x*0.5f*xrsqrt_est*xrsqrt_est); // NR iteration
+  }
 
+  template<typename T>
+	inline T fast_sqrt(T x){
+	return x* rsqrt(x);
+  }
+
+
+  
   //stored as xx, yy, zz, xy, xz, yz
-  struct Symm3x3{
-	std::array<double, 6> arr;
+  template<typename T>
+	struct Symm3x3{
+	std::array<T, 6> arr;
 
-	Symm3x3(double* a){  //assume A is row major for now
+	Symm3x3(T* a){  //assume A is row major for now
 	  //form the normal equations A^T A
 	  /*
 		[a11 a21 a31; a12 a22 a32; a13 a23 a33] * 
@@ -65,16 +95,38 @@ namespace{
 	  
 	}
 
+#ifdef INCLUDE_QUATSVD_EIGEN_API
+	template<typename Derived>
+	Symm3x3(const Eigen::DenseBase<Derived>& a){
+	  //TODO do these correctly
+	  //	  static_assert(a.RowsAtCompileTime == 3, "must be a 3x3 eigen matrix type");
+	  //	  static_assert(a.ColsAtCompileTime == 3, "must be a 3x3 eigen matrix type");
+
+	  auto& me = *this;
+	  me(0,0) = a(0,0)*a(0,0) + a(1,0)*a(1,0) + a(2,0)*a(2,0);
+	  me(1,1) = a(0,1)*a(0,1) + a(1,1)*a(1,1) + a(2,1)*a(2,1);
+	  me(2,2) = a(0,2)*a(0,2) + a(1,2)*a(1,2) + a(2,2)*a(2,2);
+
+	  me(0,1) = a(0,0)*a(0,1) + a(1,0)*a(1,1) + a(2,0)*a(2,1);
+	  me(0,2) = a(0,0)*a(0,2) + a(1,0)*a(1,2) + a(2,0)*a(2,2);
+	  
+	  me(1,2) = a(0,1)*a(0,2) + a(1,1)*a(1,2) + a(2,1)*a(2,2);
+
+	  
+	}
+	
+#endif
+	
 
 	
-	constexpr inline double& operator()(int r, int c){
+	constexpr inline T& operator()(int r, int c){
 	  assert(r <= c);
 	  if(r == c){ return arr[r]; }
 	  else if(r == 0){  return arr[2 + c]; }
 	  else return arr[5];
 	}
 
-	constexpr inline double operator()(int r, int c) const {
+	constexpr inline T operator()(int r, int c) const {
 	  assert(r <= c);
 	  if(r == c){ return arr[r]; }
 	  else if(r == 0){  return arr[2 + c]; }
@@ -89,21 +141,22 @@ namespace{
 
 	}
 
-	inline double frobeneius() const{
+	inline T frobeneius() const{
 	  return arr[0]*arr[0] + arr[1]*arr[1] + arr[2]*arr[2] +
 		2*(arr[3]*arr[3] + arr[4]*arr[4] + arr[5]*arr[5]);
 	}
 
-	inline double diagMag() const{
+	inline T diagMag() const{
 	  return arr[0]*arr[0] + arr[1]*arr[1] + arr[2]*arr[2];
 	}
 	
 	//compute Q^T S Q
 	//where Q is represented as the quaterion with c as the scalar and s in the slot that's not p or q
-	template<int p, int q>
-	void quatConjugate(double c, double s);
-
-	inline void quatConjugateFull(double* q){
+	inline void quatConjugate01(T c, T s);
+	inline void quatConjugate02(T c, T s);
+	inline void quatConjugate12(T c, T s);
+	
+	inline void quatConjugateFull(T* q){
 	  //assume q is unit
 	  /*
 		R = [a b c; d e f; g h i]
@@ -163,8 +216,8 @@ namespace{
   };
   
   
-  template<>
-	inline void Symm3x3::quatConjugate<0,1>(double c, double s){
+  template<typename T>
+	inline void Symm3x3<T>::quatConjugate01(T c, T s){
 	//rotate about the z axis
 	/*
 	  Q^T * *this * Q
@@ -200,8 +253,8 @@ namespace{
 	  
   }
 
-  template<>
-	inline void Symm3x3::quatConjugate<0,2>(double c, double s){
+  template<typename T>
+	inline void Symm3x3<T>::quatConjugate02(T c, T s){
 	//rotate about the y axis
 	//quat looks like (ch, 0, sh, 0)
 	//R = [ 1 - 2*s*s, 0, 2*c*s;  0, 1, 0;  -2*c*s, 0, 1 - 2*s*s]
@@ -241,8 +294,8 @@ namespace{
   }
   
 
-  template<>
-	inline void Symm3x3::quatConjugate<1,2>(double c, double s){
+  template<typename T>
+	inline void Symm3x3<T>::quatConjugate12(T c, T s){
 	//rotate about the x axis
 
 	//quat looks like (ch, sh, 0, 0)
@@ -291,37 +344,40 @@ namespace{
 	
 
 
-  
-  static constexpr double gamma =3 + 2*M_SQRT2;
-  static const double sinBackup = std::sin(M_PI/8);
-  static const double cosBackup = std::cos(M_PI/8);
+  //variable templates are cool
+  template<typename T>
+	static constexpr T gamma =3 + 2*T{M_SQRT2};
+  template<typename T>
+	static const T sinBackup = T{.5}*std::sqrt(T{2} - T{M_SQRT2});
+  template<typename T>
+	static const T cosBackup = T{.5}*std::sqrt(T{2} + T{M_SQRT2});
 
 
   //B is A^T A , which we'll represent as a Vec 6
   //returns c, s, the givens angles
-  template<int p, int q>
-	inline std::pair<double,double> givensAngles(const Symm3x3& B){
+  template<typename T, int p, int q>
+	inline std::pair<T,T> givensAngles(const Symm3x3<T>& B){
 	//	std::cout << "computing angles for p: " << p << " q: " << q << std::endl;
 	
-	double ch;// = B(p,p) - B(q,q);
+	T ch;// = B(p,p) - B(q,q);
 	//sign is different depending on which element we're trying to eliminate
 	if constexpr(p == 0 && q == 1){ ch = (B(p,p) - B(q, q));}
 	if constexpr(p == 0 && q == 2){ ch = (B(q,q) - B(p, p));}
 	if constexpr(p == 1 && q == 2){ ch = (B(p,p) - B(q, q));}
 	
-	double sh = .5*B(p, q);                 
+	T sh = .5*B(p, q);                 
 
 	//	std::cout << "guesses for ch " << ch << " sh " << sh
 	//			  << " norm: " << ch*ch + sh*sh << std::endl;
 
-	double omega = rsqrt(ch*ch + sh*sh);
+	T omega = rsqrt(ch*ch + sh*sh);
 	ch *= omega;
 	sh *= omega;
 	
-	bool approxValid = gamma*sh*sh < ch*ch;
+	bool approxValid = gamma<T>*sh*sh < ch*ch;
 	
-	ch = approxValid ? ch : cosBackup;
-	sh = approxValid ? sh : sinBackup;
+	ch = approxValid ? ch : cosBackup<T>;
+	sh = approxValid ? sh : sinBackup<T>;
 	
 	//	std::cout << "approx valid? " << approxValid << std::endl;
 	//	std::cout << "ch " << ch << " sh " << sh << " norm: " << ch*ch + sh*sh << std::endl;
@@ -329,8 +385,8 @@ namespace{
 	return {ch, sh};
   }
 
-
-  inline void quatTimesEquals(double* lhs, double* rhs){
+  template<typename T>
+	inline void quatTimesEquals(T* lhs, T* rhs){
 
 	//store as s, x, y, z storage order
 	/* 
@@ -350,14 +406,14 @@ namespace{
 	
   }
 
-  template<int i>
-	inline void quatTimesEqualCoordinateAxis(double* lhs, double c, double s){
+  template<typename T, int i>
+	inline void quatTimesEqualCoordinateAxis(T* lhs, T c, T s){
 	//the quat we're multiplying by is (c, ? s ?)  where s is in slot i of the vector part,
 	//and the other entries are 0
 	
 	auto newS = lhs[0]*c - lhs[i+1]*s;
 	
-	double newVals[3];
+	T newVals[3];
 	//the s2*v1 part
 	newVals[0] = c*lhs[1];  
 	newVals[1] = c*lhs[2];
@@ -374,148 +430,57 @@ namespace{
 	lhs[3] = newVals[2];
 	
   }
-  
-  inline void quatNormalize(double* q){
-	double qSum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
+
+  /*
+	template<typename T>
+	inline void quatNormalize(T* q){
+	T qSum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
 	auto norm = std::sqrt(qSum);
 	q[0] /= norm;
 	q[1] /= norm;
 	q[2] /= norm;
 	q[3] /= norm;
-  }
-
-  inline void quatDump(double* q){
+	}
+  */
+  template<typename T>
+	inline void quatDump(T* q){
 	std::cout << "quat: " << q[0] << ' ' << q[1] << ' '<< q[2] << ' ' << q[3] << std::endl;
   }
 
-  inline void matDump(double* m){
+  template<typename T>
+	inline void matDump(T* m){
 	std::cout << m[0] << ' ' << m[1] << ' ' << m[2] << '\n'
 			  << m[3] << ' ' << m[4] << ' ' << m[5] << '\n'
 			  << m[6] << ' ' << m[7] << ' ' << m[8] << std::endl;
   }
   
 
-  inline std::array<double, 4> jacobiDiagonalize(double* matrix){
-	Symm3x3 ATA(matrix);
-	//	ATA.dump();
-	//	std::cout << ATA.frobeneius() << std::endl;
-	//	std::cout << ATA.diagMag() << std::endl;
-  	std::array<double, 4> V {{1,0,0,0}};
+  template<typename T>
+	inline std::array<T, 4> jacobiDiagonalize(Symm3x3<T>& ATA){
+
+  	std::array<T, 4> V {{1,0,0,0}};
 
 	for(int i = 0; i < 4; ++i){
+	  auto givens = givensAngles<T,0,1>(ATA);
+	  ATA.quatConjugate01(givens.first, givens.second);
+	  quatTimesEqualCoordinateAxis<T,2>(V.data(), givens.first, givens.second);
 
+	  givens = givensAngles<T,1,2>(ATA);
+	  ATA.quatConjugate12(givens.first, givens.second);
+	  quatTimesEqualCoordinateAxis<T,0>(V.data(), givens.first, givens.second);
 
-	  //	  std::cout << std::endl << std::endl;
-	  auto givens = givensAngles<0,1>(ATA);
-	  ATA.quatConjugate<0,1>(givens.first, givens.second);
-	  //	  ATA.dump();
-	  //	  std::cout << ATA.frobeneius() << std::endl;
-	  //	  std::cout << ATA.diagMag() << std::endl;
+	  givens = givensAngles<T,0,2>(ATA);
+	  ATA.quatConjugate02(givens.first, givens.second);
+	  quatTimesEqualCoordinateAxis<T,1>(V.data(), givens.first, givens.second);
 
-	  //	std::cout << "quat before" << std::endl;
-	  //	quatDump(V.data());
-	  quatTimesEqualCoordinateAxis<2>(V.data(), givens.first, givens.second);
-	  //	std::cout << "quat after" << std::endl;
-	  //	  quatDump(V.data());
-	  /*	{
-			std::array<double,4> qUndo = V;
-			quatTimesEqualCoordinateAxis<2>(qUndo.data(), givens.first, -givens.second);
-			std::cout << "times quatInverse: " << std::endl;
-			quatDump(qUndo.data());
-			}*/
-
-	  /*	{
-			std::cout << "unconjugating" << std::endl;
-			Symm3x3 check = ATA;
-			check.quatConjugate<0,1>(givens.first, -givens.second);
-			check.dump();
-			std::cout << std::endl;
-			}*/
-
-	
-	  /*{
-		Symm3x3 check(matrix);
-		check.quatConjugateFull(V.data());
-		std::cout << "check" << std::endl;
-		check.dump();
-		std::cout << "check frob: " << check.frobeneius() << std::endl;
-		std::cout << "diag: " << check.diagMag() << std::endl;
-		std::cout << std::endl;
-		}*/
-
-	  //	  std::cout << std::endl << std::endl;
-	  givens = givensAngles<1,2>(ATA);
-	  ATA.quatConjugate<1,2>(givens.first, givens.second);
-	  //	  ATA.dump();
-	  //	  std::cout << ATA.frobeneius() << std::endl;
-	  //	  std::cout << ATA.diagMag() << std::endl;
-
-	  //	std::cout << "quat before" << std::endl;
-	  //	quatDump(V.data());
-
-	  quatTimesEqualCoordinateAxis<0>(V.data(), givens.first, givens.second);
-	  //	  std::cout << "quat after " << std::endl;
-	  //	  quatDump(V.data());
-
-	  /*{
-		std::array<double,4> qUndo = V;
-		quatTimesEqualCoordinateAxis<0>(qUndo.data(), givens.first, -givens.second);
-		std::cout << "times quatInverse: " << std::endl;;
-	
-		quatDump(qUndo.data());
-		}
-		{
-		Symm3x3 check(matrix);
-		check.quatConjugateFull(V.data());
-		std::cout << "check" << std::endl;
-		check.dump();
-		std::cout << "check frob: " << check.frobeneius() << std::endl;
-		std::cout << "diag: " << check.diagMag() << std::endl;
-	  
-		std::cout << std::endl;
-		}*/
-	  //	  std::cout << std::endl << std::endl;
-	  givens = givensAngles<0,2>(ATA);
-	  ATA.quatConjugate<0,2>(givens.first, givens.second);
-	  //	  ATA.dump();
-	  //	  std::cout << ATA.frobeneius() << std::endl;
-	  //	  std::cout << ATA.diagMag() << std::endl;
-
-
-	  //	std::cout << "quat before" << std::endl;
-	  //	quatDump(V.data());
-
-	  quatTimesEqualCoordinateAxis<1>(V.data(), givens.first, givens.second);
-	  //	  std::cout << "quat after " << std::endl;
-	  //	  quatDump(V.data());
-	  /*	{
-			std::array<double,4> qUndo = V;
-			quatTimesEqualCoordinateAxis<1>(qUndo.data(), givens.first, -givens.second);
-			std::cout << "times quatInverse: " << std::endl;;
-			quatDump(qUndo.data());
-			}
-			{
-			Symm3x3 check(matrix);
-			check.quatConjugateFull(V.data());
-			std::cout << "check" << std::endl;
-			check.dump();
-			std::cout << "check frob: " << check.frobeneius() << std::endl;
-			std::cout << "diag: " << check.diagMag() << std::endl;
-	  
-			std::cout << std::endl;
-			}*/
 	}
-
-	//	Symm3x3 check(matrix);
-	//	check.quatConjugateFull(V.data());
-	//	std::cout << "final check" << std::endl;
-	//	check.dump();
 
 	return V;
 	
   }
 
-  inline std::array<double, 9> computeAV(double* matrix, double* V){
+  template<typename T>
+	inline std::array<T, 9> computeAV(T* matrix, T* V){
 	//compute quaternion matrix from V
 	//V ->  [[a, b, c], [d, e, f], [g, h, i]]
 	auto a = 1 - 2*(V[2]*V[2] + V[3]*V[3]);
@@ -530,7 +495,7 @@ namespace{
 	auto h = 2*(V[2]*V[3] + V[1]*V[0]);
 	auto i = 1 - 2*(V[1]*V[1] + V[2]*V[2]);
 
-	std::array<double, 9> ret;
+	std::array<T, 9> ret;
 
 	ret[0] = a*matrix[0]  + d*matrix[1]   + g*matrix[2] ;
 	ret[1] = b*matrix[0]  + e*matrix[1]   + h*matrix[2] ;
@@ -548,11 +513,47 @@ namespace{
 	
   }
 
+#ifdef INCLUDE_QUATSVD_EIGEN_API
+  template<typename T, typename Derived>
+	inline std::array<T, 9> computeAV(const Eigen::DenseBase<Derived>& matrix, T* V){
 
-  template <int i, int j>
-	inline void swapColsNeg(double* B){
+	//compute quaternion matrix from V
+	//V ->  [[a, b, c], [d, e, f], [g, h, i]]
+	auto a = 1 - 2*(V[2]*V[2] + V[3]*V[3]);
+	auto b = 2*(V[1]*V[2] - V[3]*V[0]);
+	auto c = 2*(V[1]*V[3] + V[2]*V[0]);
+	
+	auto d = 2*(V[1]*V[2] + V[3]*V[0]);
+	auto e = 1 - 2*(V[1]*V[1] + V[3]*V[3]);
+	auto f = 2*(V[2]*V[3] - V[1]*V[0]);
+	
+	auto g = 2*(V[1]*V[3] - V[2]*V[0]);
+	auto h = 2*(V[2]*V[3] + V[1]*V[0]);
+	auto i = 1 - 2*(V[1]*V[1] + V[2]*V[2]);
 
-	double tmp = -B[i];
+	std::array<T, 9> ret;
+
+	ret[0] = a*matrix(0,0)  + d*matrix(0,1)   + g*matrix(0,2) ;
+	ret[1] = b*matrix(0,0)  + e*matrix(0,1)   + h*matrix(0,2) ;
+	ret[2] = c*matrix(0,0)  + f*matrix(0,1)   + i*matrix(0,2) ;
+
+	ret[3] = a*matrix(1,0)  + d*matrix(1,1)   + g*matrix(1,2) ;
+	ret[4] = b*matrix(1,0)  + e*matrix(1,1)   + h*matrix(1,2) ;
+	ret[5] = c*matrix(1,0)  + f*matrix(1,1)   + i*matrix(1,2) ;
+	
+	ret[6] = a*matrix(2,0)  + d*matrix(2,1)   + g*matrix(2,2) ;
+	ret[7] = b*matrix(2,0)  + e*matrix(2,1)   + h*matrix(2,2) ;
+	ret[8] = c*matrix(2,0)  + f*matrix(2,1)   + i*matrix(2,2) ;
+
+	
+	return ret;
+  }
+#endif
+  
+  template <typename T, int i, int j>
+	inline void swapColsNeg(T* B){
+
+	auto tmp = -B[i];
 	B[i] = B[j];
 	B[j] = tmp;
 
@@ -565,30 +566,31 @@ namespace{
 	B[j+6] = tmp;
   
   }
-  
-  inline void permuteColumns(double* B, double* V){
 
-	double mags[3];
+  template<typename T>
+	inline void permuteColumns(T* B, T* V){
+
+	T mags[3];
 	mags[0] = B[0]*B[0] + B[3]*B[3] + B[6]*B[6];
 	mags[1] = B[1]*B[1] + B[4]*B[4] + B[7]*B[7];
 	mags[2] = B[2]*B[2] + B[5]*B[5] + B[8]*B[8];
 
 	if(mags[0] < mags[1]){
-	  swapColsNeg<0,1>(B);
+	  swapColsNeg<T,0,1>(B);
 	  //swaps cols 0 and 1 in the corresponding matrix form, negates the new col 1
-	  quatTimesEqualCoordinateAxis<2>(V, M_SQRT1_2, M_SQRT1_2);
+	  quatTimesEqualCoordinateAxis<T,2>(V, T{M_SQRT1_2}, T{M_SQRT1_2});
 	  std::swap(mags[0], mags[1]);
 	}
 
 	if(mags[0] < mags[2]){
-	  swapColsNeg<0,2>(B);
-	  quatTimesEqualCoordinateAxis<1>(V, M_SQRT1_2, -M_SQRT1_2 );
+	  swapColsNeg<T,0,2>(B);
+	  quatTimesEqualCoordinateAxis<T,1>(V, T{M_SQRT1_2}, T{-M_SQRT1_2} );
 	  std::swap(mags[0], mags[2]);
 	}
 
 	if(mags[1] < mags[2]){
-	  swapColsNeg<1,2>(B);
-	  quatTimesEqualCoordinateAxis<0>(V, M_SQRT1_2, M_SQRT1_2);
+	  swapColsNeg<T,1,2>(B);
+	  quatTimesEqualCoordinateAxis<T,0>(V, T{M_SQRT1_2}, T{M_SQRT1_2});
 	  //don't bother swapping the mags anymore... don't care
 	}
 	
@@ -597,15 +599,15 @@ namespace{
 
   //returns the 2 components of the quaternion
   //such that Q^T * B has a 0 in element p, q
-  template<int r, int c>
-	std::pair<double,double> computeGivensQR(double* B, double eps){
+  template<typename T, int r, int c>
+	std::pair<T,T> computeGivensQR(T* B, T eps){
 
 	auto app = B[4*c];
 	auto apq = B[3*r + c];
 
 	auto rho = std::sqrt(app*app + apq*apq);
-	double sh = rho > eps ? apq : 0;
-	double ch = std::abs(app) + std::max(rho, eps);
+	T sh = rho > eps ? apq : 0;
+	T ch = std::abs(app) + std::max(rho, eps);
 
 	if(app < 0){
 	  std::swap(sh, ch);
@@ -620,12 +622,8 @@ namespace{
 
 
   //Q is the rot matrix defined by quaternion (ch, . . . sh .. . ) where sh is coord i
-  //specialized for each i
-  template<int i>
-	inline void givensQTB(double* B, double ch, double sh);
-
-  template<>
-	inline void givensQTB<2>(double* B, double ch, double sh){
+  template<typename T>
+	inline void givensQTB2(T* B, T ch, T sh){
 	//quat is (ch, 0, 0, sh), rotation around Z axis
 	auto c = ch*ch - sh*sh;
 	auto s = 2*sh*ch;
@@ -652,8 +650,8 @@ namespace{
 
   //This will be called after givensQTB<2>, so we know that
   //B10 is 0... which actually doesn't matter since that row won't change
-  template<>
-	inline void givensQTB<1>(double* B, double ch, double sh){
+  template<typename T>
+	inline void givensQTB1(T* B, T ch, T sh){
 
 	auto c = ch*ch - sh*sh;
 	auto s = 2*sh*ch;
@@ -676,8 +674,8 @@ namespace{
   }
 
   //B10 and B20 are 0, so don't bother filling in/computing them :)
-  template<>
-	inline void givensQTB<0>(double* B, double ch, double sh){
+  template<typename T>
+	inline void givensQTB0(T* B, T ch, T sh){
 
 	auto c = ch*ch - sh*sh;
 	auto s = 2*ch*sh;
@@ -685,7 +683,7 @@ namespace{
 
 	/* we may not need to compute the off diags since B should be diagonal
 	   after this step
-	 */
+	*/
 	auto newb11 = B[4]*c + B[7]*s;
 	//auto newb12 = B[5]*c + B[8]*s; 
 
@@ -698,165 +696,208 @@ namespace{
 	//B[7] = newb21;
 	B[8] = newb22;
   }
+
+
+  template<typename T>
+	inline  std::pair<std::array<T, 3>, std::array<T, 4>>
+	QRFactorize(T* AV, T* V, T eps){
+
+	permuteColumns(AV, V);
+	
+	//perform QR decomposition, which is diagonalization here!
+	std::array<T,4> U {{1, 0, 0, 0}};
+
+	{
+	  auto givens = computeGivensQR<T,1,0>(AV, eps);
+
+	  givensQTB2(AV, givens.first, givens.second);
+	  quatTimesEqualCoordinateAxis<T,2>(U.data(), givens.first, givens.second);
+	}
+
+	{
+	  auto givens = computeGivensQR<T,2,0>(AV, eps);
+
+	  //the sign of the sine should be swapped for this axis:
+	  givensQTB1(AV, givens.first, -givens.second);
+	  quatTimesEqualCoordinateAxis<T,1>(U.data(), givens.first, -givens.second);
+	}
   
+	{
+	  auto givens = computeGivensQR<T,2,1>(AV, eps);
+	
+	  givensQTB0(AV, givens.first, givens.second);
+	  quatTimesEqualCoordinateAxis<T,0>(U.data(), givens.first, givens.second);
+	}
+
+	std::array<T, 3> S{AV[0], AV[4], AV[8]};
+	return  {S, U};
+	
+  }
 }
 
-struct SVD{
-  std::array<double, 3> S;
-  std::array<double, 4> U, V;
-};
 
+namespace QuatSVD{
 
-inline SVD svd(double* matrix, double eps = 1e-8){
+  template<typename T>
+  inline SVD<T> svd(T* matrix, T eps = (.5*std::numeric_limits<T>::epsilon())){
 
-  auto V = jacobiDiagonalize(matrix);
+	Symm3x3<T> ATA(matrix);
 
-  auto AV = computeAV(matrix, V.data());
+	auto V = jacobiDiagonalize(ATA);
 
+	auto AV = computeAV(matrix, V.data());
 
-  //  matDump(AV.data());
-
-  //  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
-  //  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
-  //  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
-
-  permuteColumns(AV.data(), V.data());
-
-  //  std::cout << "after permute columns " << std::endl;
-
-  //  matDump(AV.data());
-
-  //  std::cout << AV[0]*AV[1] + AV[3]*AV[4] + AV[6]*AV[7] << std::endl;
-  //  std::cout << AV[0]*AV[2] + AV[3]*AV[5] + AV[6]*AV[8] << std::endl;
-  //  std::cout << AV[2]*AV[1] + AV[5]*AV[4] + AV[8]*AV[7] << std::endl;
-
-
-  //  auto AVCheck = computeAV(matrix, V.data());
-  //  std::cout << "AVCheck: " << std::endl;
-
-  //  matDump(AVCheck.data());
-
-  std::array<double,4> U {{1, 0, 0, 0}};
-
-  {
-	auto givens = computeGivensQR<1,0>(AV.data(), eps);
-
-	givensQTB<2>(AV.data(), givens.first, givens.second);
-	quatTimesEqualCoordinateAxis<2>(U.data(), givens.first, givens.second);
-	
-	//	std::cout << "after givens 1,0" << std::endl;
-	//	matDump(AV.data());
+	auto SU = QRFactorize(AV.data(), V.data(), eps);
+	return SVD<T>{SU.first, SU.second, V};
+  
   }
 
-  {
-	auto givens = computeGivensQR<2,0>(AV.data(), eps);
-
-	//the sign of the sine should be swapped for this axis:
-	givensQTB<1>(AV.data(), givens.first, -givens.second);
-	quatTimesEqualCoordinateAxis<1>(U.data(), givens.first, -givens.second);
+#ifdef INCLUDE_QUATSVD_EIGEN_API
+  template<typename Derived, typename T = typename Derived::Scalar>
+  inline EigenSVD<T> svd(const Eigen::DenseBase<Derived>& matrix,
+	  T eps = (.5*std::numeric_limits<T>::epsilon())){
 	
-	//	std::cout << "after givens 2,0" << std::endl;
-	//	matDump(AV.data());
+	Symm3x3<T> ATA(matrix);
+	auto V = jacobiDiagonalize(ATA);
+	auto AV = computeAV(matrix, V.data());
+
+	auto SU = QRFactorize(AV.data(), V.data(), eps);
+
+	EigenSVD<T> ret;
+	ret.S.x() = SU.first[0];
+	ret.S.y() = SU.first[1];
+	ret.S.z() = SU.first[2];
+
+	ret.U = Eigen::Quaternion<T>(SU.second[0], SU.second[1], SU.second[2], SU.second[3]);
+	ret.V = Eigen::Quaternion<T>(V[0], V[1], V[2], V[3]);
+
+	return ret;
   }
+#endif
   
-  {
-	auto givens = computeGivensQR<2,1>(AV.data(), eps);
+  //U, V as quaternions in s, x, y, z order
+  //S as a vec3
+  template<typename T>
+  inline std::array<T,9> reconstructMatrix(const SVD<T>& _svd){
+
+	const T* S = _svd.S.data();
+	const T* U = _svd.U.data();
+	const T* V = _svd.V.data();
 	
-	givensQTB<0>(AV.data(), givens.first, givens.second);
-	quatTimesEqualCoordinateAxis<0>(U.data(), givens.first, givens.second);
-	
-	//	std::cout << "after givens 2,1" << std::endl;
-	//	matDump(AV.data());
-  }
-
-  //  quatDump(U.data());
-
-  std::array<double, 3> S{AV[0], AV[4], AV[8]};
-  return SVD{S, U, V};
+	//compute S * V^T 
   
-}
-
-//U, V as quaternions in s, x, y, z order
-//S as a vec3 
-inline std::array<double,9> reconstructMatrix(double* U, double* S, double* V){
-
-  //compute S * V^T 
+	auto a = 1 - 2*(V[2]*V[2] + V[3]*V[3]);
+	auto b = 2*(V[1]*V[2] - V[3]*V[0]);
+	auto c = 2*(V[1]*V[3] + V[2]*V[0]);
   
-  auto a = 1 - 2*(V[2]*V[2] + V[3]*V[3]);
-  auto b = 2*(V[1]*V[2] - V[3]*V[0]);
-  auto c = 2*(V[1]*V[3] + V[2]*V[0]);
+	auto d = 2*(V[1]*V[2] + V[3]*V[0]);
+	auto e = 1 - 2*(V[1]*V[1] + V[3]*V[3]);
+	auto f = 2*(V[2]*V[3] - V[1]*V[0]);
   
-  auto d = 2*(V[1]*V[2] + V[3]*V[0]);
-  auto e = 1 - 2*(V[1]*V[1] + V[3]*V[3]);
-  auto f = 2*(V[2]*V[3] - V[1]*V[0]);
+	auto g = 2*(V[1]*V[3] - V[2]*V[0]);
+	auto h = 2*(V[2]*V[3] + V[1]*V[0]);
+	auto i = 1 - 2*(V[1]*V[1] + V[2]*V[2]);
+
+	std::array<T,9> SVT;
+	SVT[0] = S[0]*a;
+	SVT[1] = S[0]*d;
+	SVT[2] = S[0]*g;
+
+	SVT[3] = S[1]*b;
+	SVT[4] = S[1]*e;
+	SVT[5] = S[1]*h;
+
+	SVT[6] = S[2]*c;
+	SVT[7] = S[2]*f;
+	SVT[8] = S[2]*i;
+
+	//compute U 
   
-  auto g = 2*(V[1]*V[3] - V[2]*V[0]);
-  auto h = 2*(V[2]*V[3] + V[1]*V[0]);
-  auto i = 1 - 2*(V[1]*V[1] + V[2]*V[2]);
-
-  std::array<double,9> SVT;
-  SVT[0] = S[0]*a;
-  SVT[1] = S[0]*d;
-  SVT[2] = S[0]*g;
-
-  SVT[3] = S[1]*b;
-  SVT[4] = S[1]*e;
-  SVT[5] = S[1]*h;
-
-  SVT[6] = S[2]*c;
-  SVT[7] = S[2]*f;
-  SVT[8] = S[2]*i;
-
-  //compute U 
+	a = 1 - 2*(U[2]*U[2] + U[3]*U[3]);
+	b = 2*(U[1]*U[2] - U[3]*U[0]);
+	c = 2*(U[1]*U[3] + U[2]*U[0]);
   
-  a = 1 - 2*(U[2]*U[2] + U[3]*U[3]);
-  b = 2*(U[1]*U[2] - U[3]*U[0]);
-  c = 2*(U[1]*U[3] + U[2]*U[0]);
+	d = 2*(U[1]*U[2] + U[3]*U[0]);
+	e = 1 - 2*(U[1]*U[1] + U[3]*U[3]);
+	f = 2*(U[2]*U[3] - U[1]*U[0]);
   
-  d = 2*(U[1]*U[2] + U[3]*U[0]);
-  e = 1 - 2*(U[1]*U[1] + U[3]*U[3]);
-  f = 2*(U[2]*U[3] - U[1]*U[0]);
+	g = 2*(U[1]*U[3] - U[2]*U[0]);
+	h = 2*(U[2]*U[3] + U[1]*U[0]);
+	i = 1 - 2*(U[1]*U[1] + U[2]*U[2]);
   
-  g = 2*(U[1]*U[3] - U[2]*U[0]);
-  h = 2*(U[2]*U[3] + U[1]*U[0]);
-  i = 1 - 2*(U[1]*U[1] + U[2]*U[2]);
-  
-  std::array<double, 9> ret;
+	std::array<T, 9> ret;
 
-  ret[0] = SVT[0]*a + SVT[3]*b + SVT[6]*c;
-  ret[1] = SVT[1]*a + SVT[4]*b + SVT[7]*c;
-  ret[2] = SVT[2]*a + SVT[5]*b + SVT[8]*c;
+	ret[0] = SVT[0]*a + SVT[3]*b + SVT[6]*c;
+	ret[1] = SVT[1]*a + SVT[4]*b + SVT[7]*c;
+	ret[2] = SVT[2]*a + SVT[5]*b + SVT[8]*c;
   
-  ret[3] = SVT[0]*d + SVT[3]*e + SVT[6]*f;
-  ret[4] = SVT[1]*d + SVT[4]*e + SVT[7]*f;
-  ret[5] = SVT[2]*d + SVT[5]*e + SVT[8]*f;
+	ret[3] = SVT[0]*d + SVT[3]*e + SVT[6]*f;
+	ret[4] = SVT[1]*d + SVT[4]*e + SVT[7]*f;
+	ret[5] = SVT[2]*d + SVT[5]*e + SVT[8]*f;
   
-  ret[6] = SVT[0]*g + SVT[3]*h + SVT[6]*i;
-  ret[7] = SVT[1]*g + SVT[4]*h + SVT[7]*i;
-  ret[8] = SVT[2]*g + SVT[5]*h + SVT[8]*i;
+	ret[6] = SVT[0]*g + SVT[3]*h + SVT[6]*i;
+	ret[7] = SVT[1]*g + SVT[4]*h + SVT[7]*i;
+	ret[8] = SVT[2]*g + SVT[5]*h + SVT[8]*i;
   
-  //  matDump(ret.data());
+	//  matDump(ret.data());
 
-  return ret;
+	return ret;
   
-}
-
-inline std::pair<double,double>
-computeErrors(double* matrix){
-
-  auto res = svd(matrix);
-
-  auto reconstruction = reconstructMatrix(res.U.data(), res.S.data(), res.V.data());
-
-  double errSquared = 0;
-  double maxError = 0;
-  for(int i = 0; i < 9; ++i){
-	auto e = matrix[i] - reconstruction[i];
-	e *= e;
-	errSquared += e;
-	if(e > maxError){ maxError = e;}
   }
 
-  return {errSquared, maxError};
+#ifdef INCLUDE_QUATSVD_EIGEN_API
+  template<typename T>
+  Eigen::Matrix<T, 3, 3> reconstructMatrix(const EigenSVD<T>& _svd){
+	return _svd.U.toRotationMatrix()*_svd.S.asDiagonal()*
+	  (_svd.V.toRotationMatrix().transpose());
+  }
+#endif
+
+  
+  template<typename T>
+  inline std::pair<T,T> computeErrors(T* matrix){
+
+	auto res = svd(matrix);
+
+	auto reconstruction = reconstructMatrix(res);
+
+	T errSquared = 0;
+	T maxError = 0;
+	for(int i = 0; i < 9; ++i){
+	  auto e = matrix[i] - reconstruction[i];
+	  e *= e;
+	  errSquared += e;
+	  if(e > maxError){ maxError = e;}
+	}
+
+	return {errSquared, maxError};
+  
+  }
+
+#ifdef INCLUDE_QUATSVD_EIGEN_API
+  template<typename Derived, typename T = typename Derived::Scalar>
+  inline std::pair<T, T> computeErrors(const Eigen::DenseBase<Derived>& matrix){
+
+	auto res = svd(matrix);
+	auto reconstruction = reconstructMatrix(res);
+
+	T errSquared = 0;
+	T maxError = 0;
+	for(int r = 0; r < 3; ++r){
+	  for(int c = 0; c < 3; ++c){
+		
+		auto e = matrix(r,c) - reconstruction(r,c);
+		e *= e;
+		errSquared += e;
+		if(e > maxError){ maxError = e;}
+	  }
+	}
+
+	return {errSquared, maxError};
+	
+	
+  }
+  
+#endif
   
 }
