@@ -10,8 +10,6 @@
 #include <cmath>
 #include <x86intrin.h>
 #include <array>
-#include <cassert>
-#include <iostream>
 
 
 
@@ -128,28 +126,26 @@ namespace{
 #endif
 	
 
-	
+	//r must be less than c !!!
 	constexpr inline T& operator()(int r, int c){
-	  assert(r <= c);
 	  if(r == c){ return arr[r]; }
 	  else if(r == 0){  return arr[2 + c]; }
 	  else return arr[5];
 	}
-
+	//r must be less than c !!!
 	constexpr inline T operator()(int r, int c) const {
-	  assert(r <= c);
 	  if(r == c){ return arr[r]; }
 	  else if(r == 0){  return arr[2 + c]; }
 	  else return arr[5];
 	}
 
 
-	inline void dump() const{
+	/*inline void dump() const{
 	  std::cout << (*this)(0,0) << '\t' << (*this)(0,1) << '\t' << (*this)(0,2) << '\n'
 				<< (*this)(0,1) << '\t' << (*this)(1,1) << '\t' << (*this)(1,2) << '\n'
 				<< (*this)(0,2) << '\t' << (*this)(1,2) << '\t' << (*this)(2,2) << std::endl;
 
-	}
+				}*/
 
 	inline T frobeneius() const{
 	  return arr[0]*arr[0] + arr[1]*arr[1] + arr[2]*arr[2] +
@@ -172,10 +168,6 @@ namespace{
 		R = [a b c; d e f; g h i]
 	  */
 
-	  //	  std::cout << "qnorm in full conju: " <<
-	  //		(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]) << std::endl;
-		
-	  
 	  auto a = 1 - 2*(q[2]*q[2] + q[3]*q[3]);
 	  auto b = 2*(q[1]*q[2] - q[3]*q[0]);
 	  auto c = 2*(q[1]*q[3] + q[2]*q[0]);
@@ -367,18 +359,18 @@ namespace{
   //returns c, s, the givens angles
   template<typename T, int p, int q>
 	inline std::pair<T,T> givensAngles(const Symm3x3<T>& B){
-	//	std::cout << "computing angles for p: " << p << " q: " << q << std::endl;
 	
 	T ch;// = B(p,p) - B(q,q);
 	//sign is different depending on which element we're trying to eliminate
+
+	//note if you don't have a C++ 17 compiler,
+	//I suspect that if you remove "constexpr" that the optimzer will probably
+	//give you the same code since these values are all compile time constants
 	if constexpr(p == 0 && q == 1){ ch = (B(p,p) - B(q, q));}
 	if constexpr(p == 0 && q == 2){ ch = (B(q,q) - B(p, p));}
 	if constexpr(p == 1 && q == 2){ ch = (B(p,p) - B(q, q));}
 	
 	T sh = .5*B(p, q);                 
-
-	//	std::cout << "guesses for ch " << ch << " sh " << sh
-	//			  << " norm: " << ch*ch + sh*sh << std::endl;
 
 	T omega = rsqrt(ch*ch + sh*sh);
 	ch *= omega;
@@ -388,9 +380,6 @@ namespace{
 	
 	ch = approxValid ? ch : cosBackup<T>;
 	sh = approxValid ? sh : sinBackup<T>;
-	
-	//	std::cout << "approx valid? " << approxValid << std::endl;
-	//	std::cout << "ch " << ch << " sh " << sh << " norm: " << ch*ch + sh*sh << std::endl;
 	
 	return {ch, sh};
   }
@@ -441,18 +430,7 @@ namespace{
 	
   }
 
-  /*
-	template<typename T>
-	inline void quatNormalize(T* q){
-	T qSum = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
-	auto norm = std::sqrt(qSum);
-	q[0] /= norm;
-	q[1] /= norm;
-	q[2] /= norm;
-	q[3] /= norm;
-	}
-  */
-  template<typename T>
+  /*  template<typename T>
 	inline void quatDump(T* q){
 	std::cout << "quat: " << q[0] << ' ' << q[1] << ' '<< q[2] << ' ' << q[3] << std::endl;
   }
@@ -462,7 +440,7 @@ namespace{
 	std::cout << m[0] << ' ' << m[1] << ' ' << m[2] << '\n'
 			  << m[3] << ' ' << m[4] << ' ' << m[5] << '\n'
 			  << m[6] << ' ' << m[7] << ' ' << m[8] << std::endl;
-  }
+			  }*/
   
 
   template<typename T>
@@ -849,8 +827,6 @@ namespace QuatSVD{
 	ret[7] = SVT[1]*g + SVT[4]*h + SVT[7]*i;
 	ret[8] = SVT[2]*g + SVT[5]*h + SVT[8]*i;
   
-	//  matDump(ret.data());
-
 	return ret;
   
   }
