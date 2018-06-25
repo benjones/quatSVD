@@ -5,12 +5,15 @@
 
    Based on the uwisc tech report from here: http://pages.cs.wisc.edu/~sifakis/project_pages/svd.html
 
+
+   
+
+
 */
 
 #include <cmath>
 #include <x86intrin.h>
 #include <array>
-
 
 
 //IMPORT USAGE NOTE.  IF YOU WANT TO USE THIS WITH EIGEN MATRICES/QUATERNIONS
@@ -26,6 +29,19 @@ namespace QuatSVD{
   template<typename Derived, typename T = typename Derived::Scalar>
   inline EigenSVD<T> svd(const Eigen::DenseBase<Derived>& matrix,
   T eps = (.5*std::numeric_limits<T>::epsilon()));
+
+
+  If you have a matrix that's already decomposed into its polar decomp A = RS (a quat times a symmetric matrix)
+  We can speed up SVD computation.  It only requires a jacobi diagonalization of S and 
+  a few quat multiplications/conjugations.
+
+  This is currently only implemented for Eigen quats/matrices due to laziness
+
+  template<typename Derived, typename T = typename Derived::Scalar>
+  inline EigenSVD<T> svdFromPolar(
+	  const Eigen::Quaternion<T>& R,  //R as a quaternion
+	  const Eigen::DenseBase<Derived>& S,  //S as a 3x3 Eigen matrix
+	  T eps = (.5*std::numeric_limits<T>::epsilon())){
   */
 
 
@@ -103,6 +119,16 @@ namespace{
 	  
 	}
 
+
+	/*
+	  If we already have a symmetric matrix, in the correct format, just copy it in
+	 */
+	struct AlreadySymmetric{};
+
+	Symm3x3(T* a, AlreadySymmetric){
+	  std::copy(a, a+6, arr.data());
+	}
+
 #ifdef INCLUDE_QUATSVD_EIGEN_API
 	template<typename Derived>
 	Symm3x3(const Eigen::DenseBase<Derived>& a){
@@ -122,6 +148,20 @@ namespace{
 
 	  
 	}
+
+	//a is already symmetric, just copy it in
+	template<typename Derived>
+	Symm3x3(const Eigen::DenseBase<Derived>& a, AlreadySymmetric){
+	  auto& me = *this;
+
+	  me(0,0) = a(0,0);
+	  me(1,1) = a(1,1);
+	  me(2,2) = a(2,2);
+	  me(0,1) = a(0,1);
+	  me(0,2) = a(0,2);
+	  me(1,2) = a(1,2);
+	}
+
 	
 #endif
 	
@@ -140,11 +180,11 @@ namespace{
 	}
 
 
-	/*inline void dump() const{
+	/*	inline void dump() const{
 	  std::cout << (*this)(0,0) << '\t' << (*this)(0,1) << '\t' << (*this)(0,2) << '\n'
 				<< (*this)(0,1) << '\t' << (*this)(1,1) << '\t' << (*this)(1,2) << '\n'
 				<< (*this)(0,2) << '\t' << (*this)(1,2) << '\t' << (*this)(2,2) << std::endl;
-
+	  
 				}*/
 
 	inline T frobeneius() const{
@@ -215,7 +255,7 @@ namespace{
 	}
 	
 	
-  };
+  }; //end Symm3x3<T>
   
   
   template<typename T>
@@ -761,6 +801,34 @@ namespace QuatSVD{
 
 	return ret;
   }
+
+  /*
+	If we have the polar decomposition of A, compute SVD from that more efficiently
+	
+   */
+  template<typename Derived, typename T = typename Derived::Scalar>
+  inline EigenSVD<T> svdFromPolar(
+	  const Eigen::Quaternion<T>& R,
+	  const Eigen::DenseBase<Derived>& S,
+	  T eps = (.5*std::numeric_limits<T>::epsilon())){
+
+	Symm3x3<T> SSym(S, typename Symm3x3<T>::AlreadySymmetric{});
+
+	auto V = jacobiDiagonalize(SSym);  //S = V Sigma V^T, SSYM holds sigma
+
+	//so, now RS = R * V * sigma * V^T
+	EigenSVD<T> ret;
+	ret.S(0,0) = SSym(0,0);
+	ret.S(1,0) = SSym(1,1);
+	ret.S(2,0) = SSym(2,2);
+
+	ret.V = Eigen::Quaternion<T>(V[0], V[1], V[2], V[3]);
+	ret.U = R*ret.V;
+
+	return ret;
+  }
+
+  
 #endif
   
   //U, V as quaternions in s, x, y, z order
@@ -883,6 +951,38 @@ namespace QuatSVD{
 	
 	
   }
+
+  template<typename Derived, typename T = typename Derived::Scalar>
+  inline std::pair<T, T> computeErrorsPolar(const Eigen::DenseBase<Derived>& matrix){
+
+	auto res = svd(matrix);
+	Eigen::Matrix<T,3,3> matCopy = matrix;
+	Eigen::Quaternion<T> R = res.U*res.V.conjugate();
+	Eigen::Matrix<T,3,3> S = res.V.toRotationMatrix()*res.S.asDiagonal()*res.V.conjugate().toRotationMatrix();
+
+	Eigen::Matrix<T,3,3> reconstructedPolar = R.toRotationMatrix()*S;
+	Eigen::Matrix<T,3,3> originalReconstructionError = reconstructedPolar - matCopy;
+	
+	auto pSVD = svdFromPolar(R, S);
+	
+	auto reconstruction = reconstructMatrix(pSVD);
+
+	T errSquared = 0;
+	T maxError = 0;
+	for(int r = 0; r < 3; ++r){
+	  for(int c = 0; c < 3; ++c){
+		
+		auto e = matrix(r,c) - reconstruction(r,c);
+		e *= e;
+		errSquared += e;
+		if(e > maxError){ maxError = e;}
+	  }
+	}
+	return {errSquared, maxError};
+	
+	
+  }
+
   
 #endif
   
